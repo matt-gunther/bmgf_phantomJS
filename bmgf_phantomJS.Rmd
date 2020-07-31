@@ -1,11 +1,11 @@
 ---
-title: "AgDvt_scrape"
+title: "Annotated R code"
 author: "Matt Gunther"
 date: "5/8/2020"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup}
 knitr::opts_chunk$set(echo = TRUE)
 library(rvest)
 library(tidyverse)
@@ -20,22 +20,18 @@ message("Gathering links to each grantee profile page")
 pb <- txtProgressBar(min = 1, max = 84, initial = 0, style = 3)
 for(i in 1:84){
   setTxtProgressBar(pb, i)
-  # i <- 1
   js <- readr::read_lines("bmgf.js")
   page <- paste("page",i,sep="=")
   js[9] <- gsub(js[9], pattern = "page=2", rep= page)
   write(x = js, file = "temp.js")
   system("./phantomjs temp.js")
-  
   URLs <- read_html("bmgf.html")%>%
     html_nodes(".serif a") %>%
     html_attr("href") %>%
     append(x = URLs) 
 }
 URLs <- URLs[-which(URLs == "#")]
-URLs <- map_chr(URLs, ~{
-  paste0("https://www.gatesfoundation.org", .x)
-})
+URLs <- map_chr(URLs, ~{paste0("https://www.gatesfoundation.org", .x)})
 ```
 
 # Scrape grantee information from profile pages
