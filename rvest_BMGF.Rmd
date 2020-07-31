@@ -1,0 +1,90 @@
+---
+title: "AgDvt_scrape"
+author: "Matt Gunther"
+date: "5/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rvest)
+library(tidyverse)
+library(xlsx)
+```
+
+# Gather URLs for each grantee
+There are 84 unique pages containing a table of all ag developement grantees. This chunk iterates through each page, and then uses java script to scrape the URLs for each grantee in the table displayed on each page. (The java script is needed because the table doesn't render via static html).
+```{r, eval=F}
+URLs <- character()
+message("Gathering links to each grantee profile page")
+pb <- txtProgressBar(min = 1, max = 84, initial = 0, style = 3)
+for(i in 1:84){
+  setTxtProgressBar(pb, i)
+  # i <- 1
+  js <- readr::read_lines("bmgf.js")
+  page <- paste("page",i,sep="=")
+  js[9] <- gsub(js[9], pattern = "page=2", rep= page)
+  write(x = js, file = "temp.js")
+  system("./phantomjs temp.js")
+  
+  URLs <- read_html("bmgf.html")%>%
+    html_nodes(".serif a") %>%
+    html_attr("href") %>%
+    append(x = URLs) 
+}
+URLs <- URLs[-which(URLs == "#")]
+URLs <- map_chr(URLs, ~{
+  paste0("https://www.gatesfoundation.org", .x)
+})
+```
+
+# Scrape grantee information from profile pages
+Using a pre-defined list of CSS fields, information about each grantee will be scraped from each profile page identified in "URLs". 
+This information is fed into a data frame, which is finally printed as an Excel sheet. 
+```{r, eval = F}
+CSS <- c(
+  ".articleWrapper h2", 
+  "#bodyregion_0_interiorarticle_0_lblDate", 
+  "#bodyregion_0_interiorarticle_0_lblPurpose",
+  "#bodyregion_0_interiorarticle_0_lblAmount",
+  "#bodyregion_0_interiorarticle_0_lblTerm",
+  "#bodyregion_0_interiorarticle_0_lblTopic",
+  "#bodyregion_0_interiorarticle_0_lblRegion",
+  "#bodyregion_0_interiorarticle_0_lblProgram",
+  "#bodyregion_0_interiorarticle_0_lblLocation",
+  "#bodyregion_0_interiorarticle_0_lblSite a"
+)
+
+grantees <- data.frame(
+  "grantee_name" = character(),
+  "date"= character(),	
+  "purpose"= character(),	
+  "amount"= character(),
+  "term"= character(),
+  "topic"= character(),
+  "regions_served"= character(),
+  "program"= character(),
+  "grantee_location"= character(),
+  "grantee_website"= character(),
+  stringsAsFactors=FALSE
+)
+
+pb <- txtProgressBar(min = 1, 
+                     max = length(URLs), 
+                     initial = 0, 
+                     style = 3)
+
+for(pg in 1:length(URLs)){
+  setTxtProgressBar(pb, pg)
+  new_row <- map(CSS, ~{
+    read_html(as.character(URLs[pg])) %>%
+      html_nodes(.x)%>%
+      html_text() 
+  })
+  new_row[which(lapply(new_row, length) == 0)] <- NA
+  names(new_row) <- names(grantees)
+  grantees <- bind_rows(new_row, grantees)
+}
+
+xlsx::write.xlsx(grantees, file = "bmgf_2020.xlsx")
+```
